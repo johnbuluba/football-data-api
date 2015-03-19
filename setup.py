@@ -3,6 +3,7 @@ from setuptools import setup
 # To use a consistent encoding
 from codecs import open
 from os import path
+import unittest
 
 here = path.abspath(path.dirname(__file__))
 
@@ -42,5 +43,10 @@ setup(
     py_modules=['football_data_api'],
 
     install_requires=['tortilla'],
+
+    test_suite="tests",
+
+    tests_require=['httmock'],
+
 
 )

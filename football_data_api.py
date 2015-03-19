@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+from datetime import datetime
 from collections import namedtuple
 import re
 import time
@@ -7,18 +8,30 @@ import os.path
 import tortilla
 
 
-def replace_self(r, *args, **kwargs):
-    content = r.content.decode(r.encoding)
-    content = content.replace('"self":', '"_self":')
-    r._content = content.encode(r.encoding)
-    time.sleep(1)
+__all__ = ['FootballData', 'Timeframe']
 
 URL = 'http://api.football-data.org/alpha'
 
+api = tortilla.wrap(URL)
+
+
+#Results namedtuple so we can return result in an object
 Results = namedtuple('Results', ['goalsHomeTeam', 'goalsAwayTeam'])
 
 
-api = tortilla.wrap(URL)
+def requests_middleware(r, *args, **kwargs):
+    """
+    A middleware that edits the responses from the api.
+    The api data contains the key "self" in various responses but using this breaks tortilla because it
+    conflicts with python self. So we search and replace every key  "self" with "_self"
+    """
+    content = r.content.decode(r.encoding)
+    content = content.replace('"self":', '"_self":')
+    r._content = content.encode(r.encoding)
+
+    #Sleep so we do not flood the server with requests
+
+    time.sleep(1)
 
 
 class FootballData():
@@ -36,6 +49,29 @@ class FootballData():
         self.soccerseason = SoccerSeason
         self.fixtures = Fixture
         self.teams = Team
+
+
+class Timeframe():
+
+    def __init__(self, past=False, no=7):
+        self.past = past
+        self.no = no
+
+    @classmethod
+    def past(cls, no):
+        return cls(True, no)
+
+    @classmethod
+    def next(cls, no):
+        return cls(False, no)
+
+    def __str__(self):
+        if self.past:
+            direction = 'p'
+        else:
+            direction = 'n'
+
+        return direction + str(self.no)
 
 
 class PageBase(metaclass=ABCMeta):
@@ -76,29 +112,6 @@ class PageBase(metaclass=ABCMeta):
         return objects
 
 
-class Timeframe():
-
-    def __init__(self, past=False, no=7):
-        self.past = past
-        self.no = no
-
-    @classmethod
-    def past(cls, no):
-        pass
-
-    @classmethod
-    def next(cls, no):
-        pass
-
-    def __str__(self):
-        if self.past:
-            direction = 'p'
-        else:
-            direction = 'n'
-
-        return direction + str(self.no)
-
-
 class SoccerSeason(PageBase):
 
     @property
@@ -107,7 +120,7 @@ class SoccerSeason(PageBase):
 
     @property
     def lastUpdated(self):
-        return self.data['lastUpdated']
+        return _strp_iso8601(self.data['lastUpdated'])
 
     @property
     def league(self):
@@ -123,17 +136,17 @@ class SoccerSeason(PageBase):
 
     @property
     def year(self):
-        return self.data['year']
+        return int(self.data['year'])
 
     @property
     def teams(self):
-        teams_data = api.soccerseasons(self.id).teams.get(hooks=dict(response=replace_self))
+        teams_data = api.soccerseasons(self.id).teams.get(hooks=dict(response=requests_middleware))
         return Team.data_list(teams_data['teams'])
 
     @property
     def leagueTable(self, matchday=None):
         params = {'matchday':matchday}
-        league_table_data = api.soccerseasons(self.id).leagueTable.get(params=params, hooks=dict(response=replace_self))
+        league_table_data = api.soccerseasons(self.id).leagueTable.get(params=params, hooks=dict(response=requests_middleware))
         return LeagueTable.data_list(league_table_data['standing'])
 
     @property
@@ -141,13 +154,13 @@ class SoccerSeason(PageBase):
         params = {'matchday': matchday}
         if timeFrame is not None:
             params['timeFrame'] = str(timeFrame)
-        fixtures_table_data = api.soccerseasons(self.id).fixtures.get(params=params, hooks=dict(response=replace_self))
+        fixtures_table_data = api.soccerseasons(self.id).fixtures.get(params=params, hooks=dict(response=requests_middleware))
         return Fixture.data_list(fixtures_table_data['fixtures'])
 
     @staticmethod
     def get(*id, season=None):
         params = {'season':season}
-        data = api.soccerseasons.get(*id, params=params, hooks=dict(response=replace_self))
+        data = api.soccerseasons.get(*id, params=params, hooks=dict(response=requests_middleware))
         return data
 
 
@@ -178,17 +191,17 @@ class Team(PageBase):
         params = {'season': season, 'venue': venue}
         if timeFrame is not None:
             params['timeFrame'] = str(timeFrame)
-        fixtures_table_data = api.teams(self.id).fixtures.get(params=params, hooks=dict(response=replace_self))
+        fixtures_table_data = api.teams(self.id).fixtures.get(params=params, hooks=dict(response=requests_middleware))
         return Fixture.data_list(fixtures_table_data['fixtures'])
 
     @property
     def players(self):
-        data = api.teams(self.id).players.get(hooks=dict(response=replace_self))
+        data = api.teams(self.id).players.get(hooks=dict(response=requests_middleware))
         return Player.data_list(data['players'])
 
     @staticmethod
     def get(*id):
-        data = api.teams.get(*id, hooks=dict(response=replace_self))
+        data = api.teams.get(*id, hooks=dict(response=requests_middleware))
         return data
 
 
@@ -230,7 +243,7 @@ class LeagueTable(PageBase):
 
     @staticmethod
     def get(*id):
-        data = api.teams.get(*id, hooks=dict(response=replace_self))
+        data = api.teams.get(*id, hooks=dict(response=requests_middleware))
         return data
 
 
@@ -282,7 +295,7 @@ class Fixture(PageBase):
         params = dict()
         if timeFrame is not None:
             params['timeFrame'] = str(timeFrame)
-        data = api.fixtures.get(*id, params=params, hooks=dict(response=replace_self))
+        data = api.fixtures.get(*id, params=params, hooks=dict(response=requests_middleware))
         if 'fixture' in data:
             return data['fixture']
         else:
@@ -327,5 +340,9 @@ class Player(PageBase):
     def get(*id):
         pass
 
-if __name__ == '__main__':
-    site = FootballData()
+
+
+def _strp_iso8601(string):
+    #Replace Z with UTC
+    string = string.replace('Z', ' UTC')
+    return datetime.strptime(string, "%Y-%m-%dT%H:%M:%S %Z")
