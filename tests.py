@@ -5,7 +5,7 @@ import unittest
 
 from httmock import all_requests, HTTMock, with_httmock
 
-from football_data_api import FootballData, SoccerSeason, Team, LeagueTable, Fixture
+from football_data_api import FootballData, SoccerSeason, Team, LeagueTable, Fixture, Player
 
 
 
@@ -29,6 +29,15 @@ def mock_router(url, request):
 
     elif re.match("/alpha/soccerseasons/\d+/fixtures", url.path):
         r['content'] = get_test_data('soccerseasons_id_fixtures.json')
+
+    elif re.match("/alpha/teams/\d+$", url.path):
+        r['content'] = get_test_data('teams_id.json')
+
+    elif re.match("/alpha/teams/\d+/fixtures$", url.path):
+        r['content'] = get_test_data('teams_id_fixtures.json')
+
+    elif re.match("/alpha/teams/\d+/players", url.path):
+        r['content'] = get_test_data('teams_id_players.json')
 
     return r
 
@@ -77,5 +86,30 @@ class TestSoccerSeason(unittest.TestCase):
         self.assertIsInstance(seasons, list)
         for season in seasons:
             self.assertIsInstance(season, SoccerSeason)
+
+
+class TestTeam(unittest.TestCase):
+
+    @with_httmock(mock_router)
+    def testGetById(self):
+        team = FootballData().teams(50)
+        self.assertIsInstance(team, Team)
+        self.assertIsInstance(team.id, int)
+        self.assertIsInstance(team.code, str)
+        self.assertIsInstance(team.crestUrl, str)
+        self.assertIsInstance(team.name, str)
+        self.assertIsInstance(team.shortName, str)
+        self.assertIsInstance(team.squadMarketValue, str)
+
+
+        fixtures = team.fixtures
+        self.assertIsInstance(fixtures, list)
+        for fixture in fixtures:
+            self.assertIsInstance(fixture, Fixture)
+
+        players = team.players
+        self.assertIsInstance(players, list)
+        for player in players:
+            self.assertIsInstance(player, Player)
 
 

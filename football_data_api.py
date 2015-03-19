@@ -200,8 +200,8 @@ class Team(PageBase):
         return Player.data_list(data['players'])
 
     @staticmethod
-    def get(*id):
-        data = api.teams.get(*id, hooks=dict(response=requests_middleware))
+    def get(id):
+        data = api.teams.get(id, hooks=dict(response=requests_middleware))
         return data
 
 
